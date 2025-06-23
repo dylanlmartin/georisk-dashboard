@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Box, Typography, CircularProgress } from '@mui/material';
-import apiService from '../services/api';
+import apiService from '../services/api.ts';
 
 const RiskChart: React.FC = () => {
   const [trendData, setTrendData] = useState<any[]>([]);
@@ -49,13 +49,17 @@ const RiskChart: React.FC = () => {
   }
 
   return (
-    <ResponsiveContainer width="100%" height="90%">
+    <ResponsiveContainer width="100%" height={400}>
       <LineChart data={trendData}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="date" />
         <YAxis domain={[0, 100]} />
         <Tooltip />
-        <Legend />
+        <Legend 
+          wrapperStyle={{ fontSize: '12px' }}
+          iconSize={10}
+          height={36}
+        />
         <Line 
           type="monotone" 
           dataKey="overall" 

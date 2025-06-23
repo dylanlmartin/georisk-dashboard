@@ -1,6 +1,10 @@
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.country import Country
+from app.models.risk_score import RiskScore
+from app.expanded_countries import EXPANDED_COUNTRIES, HIGH_PRIORITY_COUNTRIES, MEDIUM_PRIORITY_COUNTRIES
+from datetime import datetime, timedelta
+import random
 
 def seed_countries():
     """Seed the database with initial country data"""
@@ -12,27 +16,15 @@ def seed_countries():
         db.close()
         return
     
+    # Create Country objects from the expanded list
     countries = [
-        Country(code="US", name="United States", region="North America", population=331900000),
-        Country(code="CN", name="China", region="Asia", population=1439000000),
-        Country(code="GB", name="United Kingdom", region="Europe", population=67800000),
-        Country(code="DE", name="Germany", region="Europe", population=83200000),
-        Country(code="BR", name="Brazil", region="South America", population=215300000),
-        Country(code="IN", name="India", region="Asia", population=1380000000),
-        Country(code="JP", name="Japan", region="Asia", population=125800000),
-        Country(code="FR", name="France", region="Europe", population=65300000),
-        Country(code="CA", name="Canada", region="North America", population=38000000),
-        Country(code="AU", name="Australia", region="Oceania", population=25500000),
-        Country(code="RU", name="Russia", region="Europe", population=145900000),
-        Country(code="IT", name="Italy", region="Europe", population=60400000),
-        Country(code="ES", name="Spain", region="Europe", population=46800000),
-        Country(code="MX", name="Mexico", region="North America", population=128900000),
-        Country(code="KR", name="South Korea", region="Asia", population=51800000),
-        Country(code="TR", name="Turkey", region="Europe", population=84300000),
-        Country(code="SA", name="Saudi Arabia", region="Middle East", population=34800000),
-        Country(code="ZA", name="South Africa", region="Africa", population=59300000),
-        Country(code="NG", name="Nigeria", region="Africa", population=206100000),
-        Country(code="EG", name="Egypt", region="Africa", population=102300000),
+        Country(
+            code=country_data["code"],
+            name=country_data["name"],
+            region=country_data["region"],
+            population=country_data["population"]
+        )
+        for country_data in EXPANDED_COUNTRIES
     ]
     
     for country in countries:
@@ -42,5 +34,101 @@ def seed_countries():
     print(f"Seeded {len(countries)} countries")
     db.close()
 
+def seed_risk_scores():
+    """Seed the database with sample risk score data"""
+    db = SessionLocal()
+    
+    # Check if risk scores already exist
+    if db.query(RiskScore).first():
+        print("Risk scores already seeded")
+        db.close()
+        return
+    
+    countries = db.query(Country).all()
+    if not countries:
+        print("No countries found. Seed countries first.")
+        db.close()
+        return
+    
+    # Generate sample risk scores for the last 30 days
+    risk_scores = []
+    base_date = datetime.utcnow() - timedelta(days=30)
+    
+    for country in countries:
+        # Generate different risk levels for different countries
+        base_risk = random.randint(20, 80)
+        
+        for day in range(30):
+            date = base_date + timedelta(days=day)
+            
+            # Add some variation to the base risk
+            political_score = max(0, min(100, base_risk + random.randint(-10, 10)))
+            economic_score = max(0, min(100, base_risk + random.randint(-15, 15)))
+            security_score = max(0, min(100, base_risk + random.randint(-20, 20)))
+            social_score = max(0, min(100, base_risk + random.randint(-5, 5)))
+            
+            # Calculate overall score using the weighted formula
+            overall_score = (
+                political_score * 0.35 +
+                economic_score * 0.25 +
+                security_score * 0.25 +
+                social_score * 0.15
+            )
+            
+            risk_score = RiskScore(
+                country_code=country.code,
+                overall_score=round(overall_score, 2),
+                political_score=political_score,
+                economic_score=economic_score,
+                security_score=security_score,
+                social_score=social_score,
+                confidence_level=85.0,
+                timestamp=date
+            )
+            risk_scores.append(risk_score)
+    
+    for score in risk_scores:
+        db.add(score)
+    
+    db.commit()
+    print(f"Seeded {len(risk_scores)} risk scores")
+    db.close()
+
+def seed_priority_countries():
+    """Seed only high and medium priority countries first"""
+    db = SessionLocal()
+    
+    # Check if countries already exist
+    if db.query(Country).first():
+        print("Countries already seeded")
+        db.close()
+        return
+    
+    # Filter to priority countries only
+    priority_codes = set(HIGH_PRIORITY_COUNTRIES + MEDIUM_PRIORITY_COUNTRIES)
+    priority_countries = [
+        country_data for country_data in EXPANDED_COUNTRIES 
+        if country_data["code"] in priority_codes
+    ]
+    
+    countries = [
+        Country(
+            code=country_data["code"],
+            name=country_data["name"],
+            region=country_data["region"],
+            population=country_data["population"]
+        )
+        for country_data in priority_countries
+    ]
+    
+    for country in countries:
+        db.add(country)
+    
+    db.commit()
+    print(f"Seeded {len(countries)} priority countries")
+    db.close()
+
 if __name__ == "__main__":
-    seed_countries()
+    seed_countries()  # Full country list
+    # seed_priority_countries()  # Uncomment to seed only priority countries
+    seed_risk_scores()

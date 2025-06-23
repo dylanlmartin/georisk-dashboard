@@ -27,8 +27,57 @@ class RiskEngine:
         # Keywords for categorizing news
         self.keywords = {
             'political': ['election', 'government', 'policy', 'political', 'parliament', 'minister', 'president'],
-            'security': ['conflict', 'terrorism', 'violence', 'war', 'attack', 'military', 'security'],
+            'security': ['conflict', 'terrorism', 'war', 'military', 'insurgency', 'bombing', 'civil war', 'armed conflict'],
             'social': ['protest', 'unrest', 'strike', 'demonstration', 'riot', 'civil']
+        }
+        
+        # High-impact security keywords (more serious threats)
+        self.high_security_keywords = ['terrorism', 'war', 'bombing', 'insurgency', 'civil war', 'armed conflict']
+        
+        # Local crime keywords to filter out (not geopolitical risks)
+        self.local_crime_keywords = ['crypto', 'wallet', 'robbery', 'theft', 'burglary', 'mugging', 'scam']
+        
+        # Known high-risk countries that should have elevated baseline scores
+        self.high_risk_adjustments = {
+            'IR': {'political': +35, 'security': +40, 'reason': 'Regional conflicts, sanctions, nuclear tensions'},
+            'AF': {'political': +40, 'security': +45, 'reason': 'Political instability, Taliban control'},
+            'SY': {'political': +40, 'security': +50, 'reason': 'Ongoing civil war'},
+            'YE': {'political': +35, 'security': +45, 'reason': 'Civil war, humanitarian crisis'},
+            'LY': {'political': +30, 'security': +35, 'reason': 'Political fragmentation'},
+            'MM': {'political': +35, 'security': +30, 'reason': 'Military coup, civil unrest'},
+            'KP': {'political': +25, 'security': +30, 'reason': 'Authoritarian regime, nuclear program'},
+            'RU': {'political': +25, 'security': +35, 'reason': 'War in Ukraine, authoritarianism'},
+            'IQ': {'political': +20, 'security': +30, 'reason': 'Political instability, sectarian tensions'},
+            'PK': {'political': +15, 'security': +25, 'reason': 'Political instability, terrorism threats'},
+        }
+        
+        # Countries that should have baseline caps (stable democracies/developed nations)
+        self.low_risk_caps = {
+            # Nordic countries
+            'NO': {'max_overall': 40, 'reason': 'Stable democracy, strong institutions'},
+            'DK': {'max_overall': 40, 'reason': 'Stable democracy, strong institutions'},
+            'SE': {'max_overall': 40, 'reason': 'Stable democracy, strong institutions'},
+            'FI': {'max_overall': 40, 'reason': 'Stable democracy, strong institutions'},
+            'IS': {'max_overall': 35, 'reason': 'Stable democracy'},
+            
+            # Western Europe stable democracies
+            'CH': {'max_overall': 35, 'reason': 'Neutral, stable democracy'},
+            'LU': {'max_overall': 35, 'reason': 'Stable EU member'},
+            'AT': {'max_overall': 40, 'reason': 'Stable EU member'},
+            'NL': {'max_overall': 40, 'reason': 'Stable EU member'},
+            'BE': {'max_overall': 42, 'reason': 'Stable EU member'},
+            'IE': {'max_overall': 40, 'reason': 'Stable EU member'},
+            
+            # Other developed nations
+            'AU': {'max_overall': 40, 'reason': 'Stable democracy'},
+            'NZ': {'max_overall': 35, 'reason': 'Stable democracy'},
+            'CA': {'max_overall': 42, 'reason': 'Stable democracy'},
+            'JP': {'max_overall': 45, 'reason': 'Stable democracy'},
+            'KR': {'max_overall': 48, 'reason': 'Developed democracy, regional tensions'},
+            
+            # EU candidates/NATO members
+            'ME': {'max_overall': 50, 'reason': 'NATO member, EU candidate'},
+            'MT': {'max_overall': 42, 'reason': 'Stable EU member'},
         }
     
     def calculate_political_risk(self, news_articles: List[Dict[str, Any]]) -> float:
@@ -56,80 +105,110 @@ class RiskEngine:
         risk_scores = []
         
         # GDP Growth Risk
-        gdp_growth = economic_data.get('gdp_growth', 0)
-        if gdp_growth < -5:
-            gdp_risk = 80
-        elif gdp_growth < 0:
-            gdp_risk = 60
-        elif gdp_growth < 2:
-            gdp_risk = 40
-        else:
-            gdp_risk = 25
-        risk_scores.append(gdp_risk)
+        gdp_growth = economic_data.get('gdp_growth')
+        if gdp_growth is not None:
+            if gdp_growth < -5:
+                gdp_risk = 80
+            elif gdp_growth < 0:
+                gdp_risk = 60
+            elif gdp_growth < 2:
+                gdp_risk = 40
+            else:
+                gdp_risk = 25
+            risk_scores.append(gdp_risk)
         
         # Inflation Risk
-        inflation = economic_data.get('inflation', 2)
-        if inflation > 20:
-            inflation_risk = 85
-        elif inflation > 10:
-            inflation_risk = 65
-        elif inflation > 5:
-            inflation_risk = 45
-        else:
-            inflation_risk = 25
-        risk_scores.append(inflation_risk)
+        inflation = economic_data.get('inflation')
+        if inflation is not None:
+            if inflation > 20:
+                inflation_risk = 85
+            elif inflation > 10:
+                inflation_risk = 65
+            elif inflation > 5:
+                inflation_risk = 45
+            else:
+                inflation_risk = 25
+            risk_scores.append(inflation_risk)
         
         # Debt-to-GDP Risk
-        debt_ratio = economic_data.get('debt_to_gdp', 60)
-        if debt_ratio > 100:
-            debt_risk = 80
-        elif debt_ratio > 80:
-            debt_risk = 60
-        elif debt_ratio > 60:
-            debt_risk = 40
-        else:
-            debt_risk = 25
-        risk_scores.append(debt_risk)
+        debt_ratio = economic_data.get('debt_to_gdp')
+        if debt_ratio is not None:
+            if debt_ratio > 100:
+                debt_risk = 80
+            elif debt_ratio > 80:
+                debt_risk = 60
+            elif debt_ratio > 60:
+                debt_risk = 40
+            else:
+                debt_risk = 25
+            risk_scores.append(debt_risk)
         
         # Currency Volatility Risk
-        currency_volatility = economic_data.get('currency_volatility', 0.05)
-        if currency_volatility > 0.2:
-            currency_risk = 85
-        elif currency_volatility > 0.1:
-            currency_risk = 65
-        elif currency_volatility > 0.05:
-            currency_risk = 45
-        else:
-            currency_risk = 25
-        risk_scores.append(currency_risk)
+        currency_volatility = economic_data.get('currency_volatility')
+        if currency_volatility is not None:
+            if currency_volatility > 0.2:
+                currency_risk = 85
+            elif currency_volatility > 0.1:
+                currency_risk = 65
+            elif currency_volatility > 0.05:
+                currency_risk = 45
+            else:
+                currency_risk = 25
+            risk_scores.append(currency_risk)
         
-        return np.mean(risk_scores)
+        # Return average of available indicators, or neutral score if none available
+        return np.mean(risk_scores) if risk_scores else 50.0
     
     def calculate_security_risk(self, news_articles: List[Dict[str, Any]]) -> float:
-        """Calculate security risk based on conflict/violence news"""
+        """Calculate security risk based on geopolitical security threats (not local crime)"""
         if not news_articles:
             return 25.0  # low baseline for security
             
-        security_articles = self._filter_articles_by_keywords(news_articles, 'security')
+        # Filter for genuine security threats, excluding local crime
+        security_articles = []
+        for article in news_articles:
+            headline = article.get('headline', '').lower()
+            
+            # Skip if it's clearly local crime
+            if any(crime_word in headline for crime_word in self.local_crime_keywords):
+                continue
+                
+            # Include if it contains security keywords
+            if any(security_word in headline for security_word in self.keywords['security']):
+                security_articles.append(article)
+        
         if not security_articles:
             return 25.0
         
-        # Higher frequency of security-related news = higher risk
-        security_frequency = len(security_articles) / len(news_articles)
-        base_risk = min(80, security_frequency * 200)  # Scale frequency to risk
+        # Weight articles by severity
+        risk_points = 0
+        total_weight = 0
         
-        # Adjust based on sentiment
-        sentiments = []
         for article in security_articles:
+            headline = article.get('headline', '').lower()
+            
+            # High-impact security incidents get more weight
+            if any(high_word in headline for high_word in self.high_security_keywords):
+                weight = 3.0  # Terrorism, war, etc.
+            else:
+                weight = 1.0  # General security issues
+            
             sentiment = self.sentiment_analyzer.polarity_scores(article['headline'])
-            sentiments.append(sentiment['compound'])
+            # Convert sentiment (-1 to 1) to risk contribution (0 to weight*20)
+            risk_contribution = weight * (10 + (sentiment['compound'] * -10))
+            
+            risk_points += risk_contribution
+            total_weight += weight
         
-        if sentiments:
-            avg_sentiment = np.mean(sentiments)
-            sentiment_adjustment = avg_sentiment * -15  # Negative sentiment increases risk
-            return max(25, min(100, base_risk + sentiment_adjustment))
+        if total_weight > 0:
+            # Average risk per article, scaled to reasonable range
+            avg_risk = risk_points / total_weight
+            # Scale based on frequency but cap the impact
+            frequency_multiplier = min(2.0, len(security_articles) / len(news_articles) * 3)
+            final_risk = avg_risk * frequency_multiplier
+            return max(25, min(85, final_risk))
         
-        return base_risk
+        return 25.0
     
     def calculate_social_risk(self, news_articles: List[Dict[str, Any]]) -> float:
         """Calculate social risk based on protest/unrest indicators"""
@@ -195,13 +274,26 @@ class RiskEngine:
         return max(0, min(100, overall))
     
     def calculate_risk_scores(self, news_articles: List[Dict[str, Any]], 
-                            economic_data: Dict[str, Any]) -> RiskScores:
+                            economic_data: Dict[str, Any], country_code: str = None) -> RiskScores:
         """Main method to calculate all risk scores"""
         political = self.calculate_political_risk(news_articles)
         economic = self.calculate_economic_risk(economic_data)
         security = self.calculate_security_risk(news_articles)
         social = self.calculate_social_risk(news_articles)
+        
+        # Apply country-specific risk adjustments for known high-risk situations
+        if country_code and country_code in self.high_risk_adjustments:
+            adjustments = self.high_risk_adjustments[country_code]
+            political = min(100, political + adjustments.get('political', 0))
+            security = min(100, security + adjustments.get('security', 0))
+            
         overall = self.calculate_overall_risk(political, economic, security, social)
+        
+        # Apply caps for stable democracies/developed nations
+        if country_code and country_code in self.low_risk_caps:
+            cap_info = self.low_risk_caps[country_code]
+            overall = min(overall, cap_info['max_overall'])
+        
         confidence = self.calculate_confidence_level(news_articles, economic_data)
         
         return RiskScores(

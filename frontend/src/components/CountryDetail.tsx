@@ -15,8 +15,8 @@ import {
   Alert,
 } from '@mui/material';
 import { ArrowBack, Refresh } from '@mui/icons-material';
-import { CountryDetail as CountryDetailType, HistoricalData } from '../types';
-import apiService from '../services/api';
+import { CountryDetail as CountryDetailType, HistoricalData } from '../types/index.ts';
+import apiService from '../services/api.ts';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const CountryDetail: React.FC = () => {

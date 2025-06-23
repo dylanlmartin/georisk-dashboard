@@ -62,9 +62,26 @@ class DataCollector:
             return []
         
         try:
-            # Search for news mentioning the country
+            # Search for news mentioning the country (avoid short country codes that might match common words)
+            if len(country_code) <= 2:
+                # For short codes like "FR", only search by country name to avoid false matches
+                search_query = f'"{country_name}"'
+                
+                # Add alternative names for countries that might be referenced differently
+                if country_name.lower() == "iran":
+                    search_query = f'"{country_name}" OR "Iranian" OR "Tehran"'
+                elif country_name.lower() == "russia":
+                    search_query = f'"{country_name}" OR "Russian" OR "Moscow" OR "Kremlin"'
+                elif country_name.lower() == "china":
+                    search_query = f'"{country_name}" OR "Chinese" OR "Beijing"'
+                elif country_name.lower() == "united states":
+                    search_query = f'"United States" OR "America" OR "U.S." OR "USA"'
+            else:
+                # For longer codes, can include both
+                search_query = f'"{country_name}" OR "{country_code}"'
+            
             params = {
-                'q': f'"{country_name}" OR "{country_code}"',
+                'q': search_query,
                 'language': 'en',
                 'sortBy': 'publishedAt',
                 'pageSize': 20,
@@ -79,6 +96,19 @@ class DataCollector:
                     
                     for article in data.get('articles', []):
                         if article.get('title') and article.get('publishedAt'):
+                            # Filter out articles that don't seem relevant to the country
+                            title = article['title'].lower()
+                            description = article.get('description', '').lower()
+                            full_text = title + ' ' + description
+                            
+                            # Skip if country name is not prominently mentioned
+                            if country_name.lower() not in full_text:
+                                continue
+                                
+                            # Skip obvious false positives
+                            if any(skip_word in title for skip_word in ['astronomy', 'picture of the day', 'recipe', 'weather']):
+                                continue
+                            
                             published_at = datetime.fromisoformat(
                                 article['publishedAt'].replace('Z', '+00:00')
                             )

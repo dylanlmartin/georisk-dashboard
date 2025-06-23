@@ -11,15 +11,16 @@ import {
   Chip,
   CircularProgress,
 } from '@mui/material';
-import { Country, RiskAlert } from '../types';
-import apiService from '../services/api';
-import WorldMap from './WorldMap';
-import RiskChart from './RiskChart';
+import { Country, RiskAlert } from '../types/index.ts';
+import apiService from '../services/api.ts';
+import WorldMap from './WorldMap.tsx';
+import RiskChart from './RiskChart.tsx';
 
 const Dashboard: React.FC = () => {
   const [countries, setCountries] = useState<Country[]>([]);
   const [topRisks, setTopRisks] = useState<Country[]>([]);
   const [alerts, setAlerts] = useState<RiskAlert[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -45,17 +46,27 @@ const Dashboard: React.FC = () => {
   };
 
   const getRiskColor = (score: number): string => {
-    if (score >= 70) return '#d32f2f'; // High risk - red
-    if (score >= 50) return '#f57c00'; // Medium risk - orange
-    if (score >= 30) return '#fbc02d'; // Low-medium risk - yellow
-    return '#388e3c'; // Low risk - green
+    if (score >= 70) return '#d32f2f'; // Red - Very High Risk
+    if (score >= 60) return '#f44336'; // Red-Orange - High Risk
+    if (score >= 50) return '#ff9800'; // Orange - Medium-High Risk
+    if (score >= 40) return '#ffc107'; // Amber - Medium Risk
+    if (score >= 30) return '#ffeb3b'; // Yellow - Low-Medium Risk
+    return '#4caf50'; // Green - Low Risk
   };
 
   const getRiskLevel = (score: number): string => {
-    if (score >= 70) return 'High';
-    if (score >= 50) return 'Medium';
+    if (score >= 70) return 'Very High';
+    if (score >= 60) return 'High';
+    if (score >= 50) return 'Medium-High';
+    if (score >= 40) return 'Medium';
     if (score >= 30) return 'Low-Medium';
     return 'Low';
+  };
+
+  const handleCountryClick = (country: Country) => {
+    setSelectedCountry(country);
+    // Could add navigation to country detail page here
+    console.log('Selected country:', country.name);
   };
 
   if (loading) {
@@ -75,11 +86,8 @@ const Dashboard: React.FC = () => {
       <Grid container spacing={3}>
         {/* World Map */}
         <Grid item xs={12} lg={8}>
-          <Paper sx={{ p: 2, height: 400 }}>
-            <Typography variant="h6" gutterBottom>
-              Global Risk Overview
-            </Typography>
-            <WorldMap countries={countries} />
+          <Paper sx={{ p: 0, height: 600 }}>
+            <WorldMap countries={countries} onCountryClick={handleCountryClick} />
           </Paper>
         </Grid>
 
@@ -90,23 +98,23 @@ const Dashboard: React.FC = () => {
               Highest Risk Countries
             </Typography>
             <List>
-              {topRisks.map((country, index) => (
-                <ListItem key={country.code} divider>
+              {topRisks.map((risk, index) => (
+                <ListItem key={risk.country_code} divider>
                   <ListItemText
-                    primary={`${index + 1}. ${country.name}`}
+                    primary={`${index + 1}. ${risk.country_name || risk.name}`}
                     secondary={
                       <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                         <Chip
-                          label={`${country.latest_risk_score?.overall_score?.toFixed(1) || 'N/A'}`}
+                          label={`${risk.overall_score?.toFixed(1) || 'N/A'}`}
                           sx={{
-                            backgroundColor: getRiskColor(country.latest_risk_score?.overall_score || 0),
+                            backgroundColor: getRiskColor(risk.overall_score || 0),
                             color: 'white',
                             mr: 1,
                           }}
                           size="small"
                         />
                         <Typography variant="caption">
-                          {getRiskLevel(country.latest_risk_score?.overall_score || 0)} Risk
+                          {getRiskLevel(risk.overall_score || 0)} Risk
                         </Typography>
                       </Box>
                     }

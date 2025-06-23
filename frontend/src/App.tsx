@@ -2,8 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import Dashboard from './components/Dashboard';
-import CountryDetail from './components/CountryDetail';
+import Dashboard from './components/Dashboard.tsx';
+import CountryDetail from './components/CountryDetail.tsx';
 
 const theme = createTheme({
   palette: {
