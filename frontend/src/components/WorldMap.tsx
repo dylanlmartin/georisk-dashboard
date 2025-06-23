@@ -1,9 +1,119 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Chip } from '@mui/material';
+import { Box, Typography, Chip, styled, CircularProgress } from '@mui/material';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
+import { ZoomIn, Public, Info } from '@mui/icons-material';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+// Fix for default markers in react-leaflet
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 import { Country } from '../types/index.ts';
+import { getRiskColor, getRiskLevel, designTokens } from '../theme/theme.ts';
+
+// Styled components for dark theme map
+const MapHeader = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(3),
+  background: `linear-gradient(135deg, ${designTokens.colors.background.secondary} 0%, ${designTokens.colors.background.tertiary} 100%)`,
+  borderBottom: `1px solid ${designTokens.colors.border.subtle}`,
+  borderRadius: `${designTokens.borderRadius.medium} ${designTokens.borderRadius.medium} 0 0`,
+}));
+
+const LegendContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: theme.spacing(1),
+  alignItems: 'center',
+  marginTop: theme.spacing(2),
+  padding: theme.spacing(2),
+  backgroundColor: designTokens.colors.background.elevated,
+  borderRadius: designTokens.borderRadius.small,
+  border: `1px solid ${designTokens.colors.border.subtle}`,
+}));
+
+const LegendItem = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: theme.spacing(0.5),
+  padding: `${theme.spacing(0.5)} ${theme.spacing(1)}`,
+  borderRadius: designTokens.borderRadius.small,
+  backgroundColor: `${designTokens.colors.background.primary}80`,
+  border: `1px solid ${designTokens.colors.border.subtle}`,
+}));
+
+const LegendColor = styled(Box)<{ color: string }>(({ color }) => ({
+  width: 16,
+  height: 16,
+  backgroundColor: color,
+  borderRadius: '3px',
+  border: `1px solid ${designTokens.colors.border.emphasis}`,
+  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+}));
+
+const MapContainer_Styled = styled(Box)({
+  flex: 1,
+  position: 'relative',
+  backgroundColor: designTokens.colors.background.primary,
+  minHeight: '400px', // Ensure minimum height for map
+  height: '100%',
+  '& .leaflet-container': {
+    backgroundColor: designTokens.colors.background.primary,
+    color: designTokens.colors.text.primary,
+  },
+  '& .leaflet-control-zoom': {
+    border: `1px solid ${designTokens.colors.border.emphasis}`,
+    borderRadius: designTokens.borderRadius.small,
+    backgroundColor: designTokens.colors.background.elevated,
+    '& a': {
+      backgroundColor: designTokens.colors.background.elevated,
+      color: designTokens.colors.text.primary,
+      borderColor: designTokens.colors.border.emphasis,
+      '&:hover': {
+        backgroundColor: designTokens.colors.background.secondary,
+      },
+    },
+  },
+  '& .leaflet-popup-content-wrapper': {
+    backgroundColor: designTokens.colors.background.elevated,
+    color: designTokens.colors.text.primary,
+    borderRadius: designTokens.borderRadius.small,
+    border: `1px solid ${designTokens.colors.border.emphasis}`,
+    boxShadow: designTokens.shadows.card,
+  },
+  '& .leaflet-popup-tip': {
+    backgroundColor: designTokens.colors.background.elevated,
+  },
+  '& .leaflet-tooltip': {
+    backgroundColor: designTokens.colors.background.elevated,
+    color: designTokens.colors.text.primary,
+    border: `1px solid ${designTokens.colors.border.emphasis}`,
+    borderRadius: designTokens.borderRadius.small,
+    fontSize: '12px',
+    fontWeight: 500,
+    backdropFilter: 'blur(8px)',
+  },
+});
+
+const SelectedCountryPanel = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(3),
+  background: `linear-gradient(135deg, ${designTokens.colors.background.tertiary} 0%, ${designTokens.colors.background.elevated} 100%)`,
+  borderTop: `1px solid ${designTokens.colors.border.emphasis}`,
+  borderRadius: `0 0 ${designTokens.borderRadius.medium} ${designTokens.borderRadius.medium}`,
+}));
+
+const LoadingContainer = styled(Box)({
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+  height: '100%',
+  backgroundColor: designTokens.colors.background.primary,
+  gap: designTokens.spacing.medium,
+});
 
 // Country name mapping for better matching between GeoJSON and our data
 const countryNameMappings: { [key: string]: string } = {
@@ -59,37 +169,30 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
 
   useEffect(() => {
     // Load world countries GeoJSON data
+    console.log('WorldMap useEffect: Loading GeoJSON data...');
+    console.log('WorldMap useEffect: Countries array length:', countries.length);
+    
     fetch('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson')
-      .then(response => response.json())
+      .then(response => {
+        console.log('WorldMap: Fetch response status:', response.status);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
       .then(data => {
+        console.log('WorldMap: GeoJSON data loaded successfully. Features count:', data?.features?.length);
+        console.log('WorldMap: Sample feature:', data?.features?.[0]);
         setGeoData(data);
         setLoading(false);
       })
       .catch(error => {
-        console.error('Error loading GeoJSON data:', error);
+        console.error('WorldMap: Error loading GeoJSON data:', error);
         setLoading(false);
       });
   }, []);
   
-  const getRiskColor = (score?: number): string => {
-    if (!score) return '#e0e0e0'; // Gray for no data
-    if (score >= 70) return '#d32f2f'; // Red - Very High Risk
-    if (score >= 60) return '#f44336'; // Red-Orange - High Risk
-    if (score >= 50) return '#ff9800'; // Orange - Medium-High Risk
-    if (score >= 40) return '#ffc107'; // Amber - Medium Risk
-    if (score >= 30) return '#ffeb3b'; // Yellow - Low-Medium Risk
-    return '#4caf50'; // Green - Low Risk
-  };
-
-  const getRiskLevel = (score?: number): string => {
-    if (!score) return 'No Data';
-    if (score >= 70) return 'Very High Risk';
-    if (score >= 60) return 'High Risk';
-    if (score >= 50) return 'Medium-High Risk';
-    if (score >= 40) return 'Medium Risk';
-    if (score >= 30) return 'Low-Medium Risk';
-    return 'Low Risk';
-  };
+  const getNoDataColor = (): string => designTokens.colors.text.disabled;
 
 
   const handleCountryHover = (country: Country) => {
@@ -146,9 +249,9 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
       layer.setStyle({
         fillColor: riskColor,
         weight: 1,
-        opacity: 0.7,
-        color: '#666',
-        fillOpacity: 0.8
+        opacity: 0.8,
+        color: designTokens.colors.border.emphasis,
+        fillOpacity: 0.7
       });
 
       // Popup on click
@@ -160,9 +263,10 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
       layer.on('mouseover', () => {
         setHoveredCountry(countryData);
         layer.setStyle({
-          weight: 3,
-          color: '#333',
-          fillOpacity: 1.0
+          weight: 2,
+          color: designTokens.colors.accent.primary,
+          fillOpacity: 0.9,
+          fillColor: riskColor
         });
       });
 
@@ -170,8 +274,8 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
         setHoveredCountry(null);
         layer.setStyle({
           weight: 1,
-          color: '#666',
-          fillOpacity: 0.8
+          color: designTokens.colors.border.emphasis,
+          fillOpacity: 0.7
         });
       });
 
@@ -188,11 +292,11 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
     } else {
       // Style for countries not in our dataset
       layer.setStyle({
-        fillColor: '#f0f0f0',
+        fillColor: getNoDataColor(),
         weight: 1,
-        opacity: 0.5,
-        color: '#ccc',
-        fillOpacity: 0.3
+        opacity: 0.4,
+        color: designTokens.colors.border.subtle,
+        fillOpacity: 0.2
       });
     }
   };
@@ -201,148 +305,170 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Header with legend */}
-      <Box sx={{ p: 2, backgroundColor: '#f8f9fa', borderRadius: '8px 8px 0 0' }}>
-        <Typography variant="h6" gutterBottom sx={{ color: '#1976d2', fontWeight: 600 }}>
-          Interactive Geopolitical Risk Map
+      <MapHeader>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+          <Public sx={{ color: designTokens.colors.accent.primary, fontSize: 28 }} />
+          <Typography variant="h6" sx={{ color: designTokens.colors.text.primary, fontWeight: 600 }}>
+            Interactive Geopolitical Risk Map
+          </Typography>
+        </Box>
+        
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Tracking {countries.length} countries • Click countries for details • Hover for quick info
         </Typography>
         
         {/* Risk Legend */}
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-          <Typography variant="body2" sx={{ fontWeight: 500, mr: 1 }}>Risk Level:</Typography>
+        <LegendContainer>
+          <Typography variant="body2" sx={{ fontWeight: 600, mr: 1, color: designTokens.colors.text.primary }}>
+            Risk Level:
+          </Typography>
           {[
             { label: 'Low (0-30)', score: 25 },
-            { label: 'Low-Med (30-40)', score: 35 },
-            { label: 'Medium (40-50)', score: 45 },
-            { label: 'Med-High (50-60)', score: 55 },
-            { label: 'High (60-70)', score: 65 },
-            { label: 'Very High (70+)', score: 75 },
+            { label: 'Low-Med (30-45)', score: 35 },
+            { label: 'Medium (45-60)', score: 50 },
+            { label: 'Med-High (60-75)', score: 65 },
+            { label: 'High (75-90)', score: 80 },
+            { label: 'Very High (90+)', score: 95 },
           ].map((item, index) => (
-            <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Box 
-                sx={{ 
-                  width: 14, 
-                  height: 14, 
-                  backgroundColor: getRiskColor(item.score), 
-                  borderRadius: '2px',
-                  border: '1px solid rgba(0,0,0,0.1)'
-                }} 
-              />
-              <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#666' }}>
+            <LegendItem key={index}>
+              <LegendColor color={getRiskColor(item.score)} />
+              <Typography variant="caption" sx={{ fontSize: '0.75rem', color: designTokens.colors.text.secondary }}>
                 {item.label}
               </Typography>
-            </Box>
+            </LegendItem>
           ))}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
-            <Box 
-              sx={{ 
-                width: 14, 
-                height: 14, 
-                backgroundColor: '#e0e0e0', 
-                borderRadius: '2px',
-                border: '1px solid rgba(0,0,0,0.1)'
-              }} 
-            />
-            <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#666' }}>
+          <LegendItem>
+            <LegendColor color={getNoDataColor()} />
+            <Typography variant="caption" sx={{ fontSize: '0.75rem', color: designTokens.colors.text.secondary }}>
               No Data
             </Typography>
-          </Box>
-        </Box>
-        
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-          Tracking {countries.length} countries • Click countries on map for details • Hover for quick info
-        </Typography>
-      </Box>
+          </LegendItem>
+        </LegendContainer>
+      </MapHeader>
 
       {/* Leaflet World Map */}
-      <Box sx={{ flex: 1, position: 'relative' }}>
+      <MapContainer_Styled>
+        {console.log('WorldMap render state:', { loading, geoDataExists: !!geoData, countriesLength: countries.length })}
+        {console.log('WorldMap geoData type:', typeof geoData, 'geoData keys:', geoData ? Object.keys(geoData) : 'null')}
         {loading ? (
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            height: '100%',
-            backgroundColor: '#f5f7fa'
-          }}>
+          <LoadingContainer>
+            <CircularProgress 
+              size={48} 
+              sx={{ 
+                color: designTokens.colors.accent.primary,
+                '& .MuiCircularProgress-circle': {
+                  strokeLinecap: 'round',
+                },
+              }} 
+            />
             <Typography variant="body2" color="text.secondary">
               Loading world map...
             </Typography>
-          </Box>
+          </LoadingContainer>
         ) : geoData ? (
-          <MapContainer
-            center={[20, 0]}
-            zoom={2}
-            style={{ height: '100%', width: '100%' }}
-            zoomControl={true}
-            scrollWheelZoom={true}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
-            <GeoJSON
-              data={geoData}
-              onEachFeature={onEachFeature}
-              key={`geojson-${countries.length}`} // Re-render when countries data changes
-            />
-          </MapContainer>
+          <div style={{ height: '400px', width: '100%', backgroundColor: '#0D1117' }}>
+            {console.log('WorldMap: About to render MapContainer with geoData:', !!geoData)}
+            <MapContainer
+              center={[20, 0]}
+              zoom={2}
+              style={{ height: '400px', width: '100%', backgroundColor: '#0D1117' }}
+              zoomControl={true}
+              scrollWheelZoom={true}
+              whenCreated={() => console.log('WorldMap: MapContainer created successfully')}
+            >
+              {console.log('WorldMap: Inside MapContainer, rendering TileLayer and GeoJSON')}
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                errorTileUrl="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+              />
+              <GeoJSON
+                data={geoData}
+                onEachFeature={onEachFeature}
+                key={`geojson-${countries.length}`} // Re-render when countries data changes
+              />
+            </MapContainer>
+          </div>
         ) : (
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            height: '100%',
-            backgroundColor: '#f5f7fa'
-          }}>
+          <LoadingContainer>
             <Typography variant="body2" color="text.secondary">
               Failed to load map data
             </Typography>
-          </Box>
+          </LoadingContainer>
         )}
-      </Box>
+      </MapContainer_Styled>
 
       {/* Selected Country Details */}
       {selectedCountry && (
-        <Box sx={{ p: 2, backgroundColor: '#ffffff', borderTop: '1px solid #e0e0e0' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-            <Typography variant="h6" sx={{ color: '#1976d2' }}>
-              {selectedCountry.name} ({selectedCountry.code})
-            </Typography>
+        <SelectedCountryPanel>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Info sx={{ color: designTokens.colors.accent.primary, fontSize: 20 }} />
+              <Typography variant="h6" sx={{ color: designTokens.colors.text.primary, fontWeight: 600 }}>
+                {selectedCountry.name} ({selectedCountry.code})
+              </Typography>
+            </Box>
             {selectedCountry.latest_risk_score && (
               <Chip 
-                label={`Risk: ${selectedCountry.latest_risk_score.overall_score.toFixed(1)} - ${getRiskLevel(selectedCountry.latest_risk_score.overall_score)}`}
+                label={`${selectedCountry.latest_risk_score.overall_score.toFixed(1)} - ${getRiskLevel(selectedCountry.latest_risk_score.overall_score)}`}
                 sx={{ 
-                  backgroundColor: getRiskColor(selectedCountry.latest_risk_score.overall_score),
-                  color: selectedCountry.latest_risk_score.overall_score > 50 ? 'white' : 'black',
-                  fontWeight: 600
+                  background: `linear-gradient(135deg, ${getRiskColor(selectedCountry.latest_risk_score.overall_score)}, ${getRiskColor(selectedCountry.latest_risk_score.overall_score)}CC)`,
+                  color: 'white',
+                  fontWeight: 600,
+                  border: `1px solid ${getRiskColor(selectedCountry.latest_risk_score.overall_score)}40`,
                 }}
               />
             )}
-            <Chip label={selectedCountry.region} variant="outlined" size="small" />
-            <Typography variant="body2" color="text.secondary">
-              Population: {selectedCountry.population.toLocaleString()}
-            </Typography>
+            <Chip 
+              label={selectedCountry.region} 
+              variant="outlined" 
+              size="small"
+              sx={{ 
+                borderColor: designTokens.colors.border.emphasis,
+                color: designTokens.colors.text.secondary,
+              }}
+            />
           </Box>
           
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Population: {selectedCountry.population.toLocaleString()}
+          </Typography>
+          
           {selectedCountry.latest_risk_score && (
-            <Box sx={{ mt: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <Typography variant="body2">
-                Political: <strong>{selectedCountry.latest_risk_score.political_score.toFixed(1)}</strong>
-              </Typography>
-              <Typography variant="body2">
-                Economic: <strong>{selectedCountry.latest_risk_score.economic_score.toFixed(1)}</strong>
-              </Typography>
-              <Typography variant="body2">
-                Security: <strong>{selectedCountry.latest_risk_score.security_score.toFixed(1)}</strong>
-              </Typography>
-              <Typography variant="body2">
-                Social: <strong>{selectedCountry.latest_risk_score.social_score.toFixed(1)}</strong>
-              </Typography>
-              <Typography variant="body2">
-                Confidence: <strong>{selectedCountry.latest_risk_score.confidence_level.toFixed(1)}%</strong>
-              </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 2 }}>
+              <Box sx={{ p: 1.5, backgroundColor: designTokens.colors.background.primary, borderRadius: 1, border: `1px solid ${designTokens.colors.border.subtle}` }}>
+                <Typography variant="caption" color="text.secondary">Political</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {selectedCountry.latest_risk_score.political_score.toFixed(1)}
+                </Typography>
+              </Box>
+              <Box sx={{ p: 1.5, backgroundColor: designTokens.colors.background.primary, borderRadius: 1, border: `1px solid ${designTokens.colors.border.subtle}` }}>
+                <Typography variant="caption" color="text.secondary">Economic</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {selectedCountry.latest_risk_score.economic_score.toFixed(1)}
+                </Typography>
+              </Box>
+              <Box sx={{ p: 1.5, backgroundColor: designTokens.colors.background.primary, borderRadius: 1, border: `1px solid ${designTokens.colors.border.subtle}` }}>
+                <Typography variant="caption" color="text.secondary">Security</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {selectedCountry.latest_risk_score.security_score.toFixed(1)}
+                </Typography>
+              </Box>
+              <Box sx={{ p: 1.5, backgroundColor: designTokens.colors.background.primary, borderRadius: 1, border: `1px solid ${designTokens.colors.border.subtle}` }}>
+                <Typography variant="caption" color="text.secondary">Social</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {selectedCountry.latest_risk_score.social_score.toFixed(1)}
+                </Typography>
+              </Box>
+              <Box sx={{ p: 1.5, backgroundColor: designTokens.colors.background.primary, borderRadius: 1, border: `1px solid ${designTokens.colors.border.subtle}` }}>
+                <Typography variant="caption" color="text.secondary">Confidence</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {selectedCountry.latest_risk_score.confidence_level.toFixed(1)}%
+                </Typography>
+              </Box>
             </Box>
           )}
-        </Box>
+        </SelectedCountryPanel>
       )}
     </Box>
   );
