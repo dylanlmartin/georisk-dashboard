@@ -169,25 +169,19 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
 
   useEffect(() => {
     // Load world countries GeoJSON data
-    console.log('WorldMap useEffect: Loading GeoJSON data...');
-    console.log('WorldMap useEffect: Countries array length:', countries.length);
-    
     fetch('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson')
       .then(response => {
-        console.log('WorldMap: Fetch response status:', response.status);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         return response.json();
       })
       .then(data => {
-        console.log('WorldMap: GeoJSON data loaded successfully. Features count:', data?.features?.length);
-        console.log('WorldMap: Sample feature:', data?.features?.[0]);
         setGeoData(data);
         setLoading(false);
       })
       .catch(error => {
-        console.error('WorldMap: Error loading GeoJSON data:', error);
+        console.error('Error loading GeoJSON data:', error);
         setLoading(false);
       });
   }, []);
@@ -348,8 +342,6 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
 
       {/* Leaflet World Map */}
       <MapContainer_Styled>
-        {console.log('WorldMap render state:', { loading, geoDataExists: !!geoData, countriesLength: countries.length })}
-        {console.log('WorldMap geoData type:', typeof geoData, 'geoData keys:', geoData ? Object.keys(geoData) : 'null')}
         {loading ? (
           <LoadingContainer>
             <CircularProgress 
@@ -367,16 +359,13 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
           </LoadingContainer>
         ) : geoData ? (
           <div style={{ height: '400px', width: '100%', backgroundColor: '#0D1117' }}>
-            {console.log('WorldMap: About to render MapContainer with geoData:', !!geoData)}
             <MapContainer
               center={[20, 0]}
               zoom={2}
               style={{ height: '400px', width: '100%', backgroundColor: '#0D1117' }}
               zoomControl={true}
               scrollWheelZoom={true}
-              whenCreated={() => console.log('WorldMap: MapContainer created successfully')}
             >
-              {console.log('WorldMap: Inside MapContainer, rendering TileLayer and GeoJSON')}
               <TileLayer
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

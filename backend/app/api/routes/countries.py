@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
 from datetime import datetime, timedelta
+import random
 
 from app.database import get_db
 from app.models.country import Country
@@ -224,3 +225,133 @@ async def test_country_data_collection(country_code: str, db: Session = Depends(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error testing data collection: {str(e)}")
+
+@router.get("/countries/{country_code}/analysis")
+async def get_country_analysis(country_code: str, db: Session = Depends(get_db)):
+    """Get AI-generated risk analysis for a specific country"""
+    country = db.query(Country).filter(Country.code == country_code.upper()).first()
+    if not country:
+        raise HTTPException(status_code=404, detail="Country not found")
+    
+    # Get latest risk score for context
+    latest_score = db.query(RiskScoreV2).filter(
+        RiskScoreV2.country_id == country.id
+    ).order_by(desc(RiskScoreV2.score_date)).first()
+    
+    if not latest_score:
+        # Fallback to legacy risk scores
+        latest_score = db.query(RiskScore).filter(
+            RiskScore.country_code == country.code
+        ).order_by(desc(RiskScore.timestamp)).first()
+    
+    # Generate analysis based on country profile and risk scores
+    analysis = generate_country_analysis(country, latest_score)
+    
+    return analysis
+
+def generate_country_analysis(country: Country, latest_score) -> dict:
+    """Generate AI-like analysis for a country based on its profile and risk scores"""
+    
+    # Determine risk level and extract scores based on model type
+    if latest_score:
+        overall_score = float(latest_score.overall_score)
+        
+        # Check if it's RiskScoreV2 or legacy RiskScore
+        if hasattr(latest_score, 'political_stability_score'):
+            # RiskScoreV2 model
+            political_score = float(latest_score.political_stability_score)
+            economic_score = float(latest_score.economic_risk_score)
+            security_score = float(latest_score.conflict_risk_score)
+            social_score = float(latest_score.institutional_quality_score)
+        else:
+            # Legacy RiskScore model
+            political_score = float(latest_score.political_score)
+            economic_score = float(latest_score.economic_score)
+            security_score = float(latest_score.security_score)
+            social_score = float(latest_score.social_score)
+    else:
+        overall_score = 50.0
+        political_score = economic_score = security_score = social_score = 50.0
+    
+    # Risk level determination
+    if overall_score >= 90:
+        risk_level = "very high"
+    elif overall_score >= 75:
+        risk_level = "high"
+    elif overall_score >= 60:
+        risk_level = "medium-high"
+    elif overall_score >= 45:
+        risk_level = "medium"
+    elif overall_score >= 30:
+        risk_level = "low-medium"
+    else:
+        risk_level = "low"
+    
+    # Country-specific analysis templates
+    country_profiles = {
+        "United States": {
+            "key_factors": ["Federal political dynamics", "Economic monetary policy", "International relations", "Domestic polarization"],
+            "risks": ["Political polarization and governance gridlock", "Economic inequality and inflation pressures", "International tensions and trade disputes"],
+            "stability": ["Strong institutional framework", "Diversified economy", "Military and security capabilities"],
+            "outlook": "Political and economic cycles continue to drive short-term volatility while institutional resilience provides stability."
+        },
+        "China": {
+            "key_factors": ["Central government policy direction", "Economic transition dynamics", "Regional tensions", "Social stability measures"],
+            "risks": ["Economic growth slowdown", "Geopolitical tensions", "Internal governance challenges"],
+            "stability": ["Centralized governance structure", "Economic development momentum", "Strategic planning capabilities"],
+            "outlook": "Structural economic transitions and geopolitical positioning remain key factors for medium-term stability."
+        },
+        "Afghanistan": {
+            "key_factors": ["Security and governance transition", "Economic reconstruction needs", "International engagement", "Social cohesion"],
+            "risks": ["Ongoing security challenges", "Economic instability and humanitarian needs", "Political legitimacy questions"],
+            "stability": ["Regional stakeholder interest", "International humanitarian support", "Cultural resilience"],
+            "outlook": "Near-term challenges require sustained international engagement and internal capacity building."
+        },
+        "Germany": {
+            "key_factors": ["European Union leadership role", "Economic competitiveness", "Energy transition", "Demographic changes"],
+            "risks": ["Energy security and supply chain dependencies", "Economic competitiveness pressures", "Political coalition dynamics"],
+            "stability": ["Strong institutional framework", "Economic diversification", "European integration benefits"],
+            "outlook": "Economic and energy transitions present challenges while institutional strength supports adaptation."
+        }
+    }
+    
+    # Get country-specific profile or use default
+    profile = country_profiles.get(country.name, {
+        "key_factors": ["Political stability dynamics", "Economic development patterns", "Security environment", "Social cohesion factors"],
+        "risks": ["Regional geopolitical tensions", "Economic vulnerabilities", "Governance challenges"],
+        "stability": ["Institutional capacity", "Economic fundamentals", "International partnerships"],
+        "outlook": "Current trends require continued monitoring of key indicators for strategic assessment."
+    })
+    
+    # Generate region-specific insights
+    region_insights = {
+        "North America": "benefits from strong institutional frameworks and economic integration",
+        "Europe": "operates within multilateral frameworks providing stability mechanisms",
+        "Asia": "experiences rapid economic transformation with varying governance models",
+        "Middle East": "faces complex geopolitical dynamics and economic diversification challenges",
+        "Africa": "shows diverse development trajectories with significant growth potential",
+        "South America": "balances economic development with political stability considerations",
+        "Oceania": "maintains stable governance with strong international partnerships",
+        "Central Asia": "navigates regional power dynamics and economic development priorities"
+    }
+    
+    region_context = region_insights.get(country.region, "experiences unique regional dynamics")
+    
+    # Generate summary
+    population_size = "large" if country.population > 100000000 else "medium" if country.population > 10000000 else "small"
+    
+    summary = f"{country.name} presents a {risk_level} risk environment with an overall score of {overall_score:.1f}. " \
+              f"As a {population_size} {country.region} country, it {region_context}. " \
+              f"Key risk drivers include political stability (score: {political_score:.1f}), " \
+              f"economic conditions (score: {economic_score:.1f}), security environment (score: {security_score:.1f}), " \
+              f"and social dynamics (score: {social_score:.1f})."
+    
+    return {
+        "summary": summary,
+        "key_drivers": profile["key_factors"],
+        "risk_factors": profile["risks"],
+        "stability_factors": profile["stability"],
+        "outlook": profile["outlook"],
+        "risk_level": risk_level,
+        "generated_at": datetime.utcnow().isoformat()
+    }

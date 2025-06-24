@@ -18,6 +18,7 @@ import { Country, RiskAlert } from '../types/index.ts';
 import apiService from '../services/api.ts';
 import WorldMap from './WorldMap.tsx';
 import RiskChart from './RiskChart.tsx';
+import CountryDetailWidget from './CountryDetailWidget.tsx';
 import { getRiskColor, getRiskLevel, getRiskGradient, designTokens } from '../theme/theme.ts';
 
 // Styled components for modern design
@@ -140,6 +141,7 @@ const Dashboard: React.FC = () => {
   const [topRisks, setTopRisks] = useState<Country[]>([]);
   const [alerts, setAlerts] = useState<RiskAlert[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
+  const [isCountryDetailOpen, setIsCountryDetailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -167,8 +169,12 @@ const Dashboard: React.FC = () => {
 
   const handleCountryClick = (country: Country) => {
     setSelectedCountry(country);
-    // Could add navigation to country detail page here
-    console.log('Selected country:', country.name);
+    setIsCountryDetailOpen(true);
+  };
+
+  const handleCountryDetailClose = () => {
+    setIsCountryDetailOpen(false);
+    setSelectedCountry(null);
   };
 
   if (loading) {
@@ -226,8 +232,6 @@ const Dashboard: React.FC = () => {
               </Typography>
             </Box>
             <Box sx={{ position: 'relative', zIndex: 2 }}>
-              {console.log('Dashboard: Passing countries to WorldMap. Length:', countries.length)}
-              {console.log('Dashboard: Sample country:', countries[0])}
               <WorldMap countries={countries} onCountryClick={handleCountryClick} />
             </Box>
           </MapContainer>
@@ -245,7 +249,11 @@ const Dashboard: React.FC = () => {
             <Box sx={{ flex: 1, overflow: 'auto', pr: 1 }}>
               <List sx={{ '& .MuiListItem-root': { px: 0 } }}>
                 {topRisks.map((risk, index) => (
-                  <RiskListItem key={risk.country_code}>
+                  <RiskListItem 
+                    key={risk.country_code}
+                    onClick={() => handleCountryClick(risk)}
+                    sx={{ cursor: 'pointer' }}
+                  >
                     <RankAvatar rank={index + 1}>{index + 1}</RankAvatar>
                     <ListItemText
                       primary={
@@ -318,8 +326,16 @@ const Dashboard: React.FC = () => {
                 </Box>
               ) : (
                 <List sx={{ '& .MuiListItem-root': { px: 0 } }}>
-                  {alerts.slice(0, 5).map((alert, index) => (
-                    <AlertItem key={index} direction={alert.direction}>
+                  {alerts.slice(0, 5).map((alert, index) => {
+                    // Find the country from our countries array
+                    const alertCountry = countries.find(c => c.code === alert.country_code || c.name === alert.country_name);
+                    return (
+                    <AlertItem 
+                      key={index} 
+                      direction={alert.direction}
+                      onClick={() => alertCountry && handleCountryClick(alertCountry)}
+                      sx={{ cursor: alertCountry ? 'pointer' : 'default' }}
+                    >
                       <Box sx={{ 
                         display: 'flex', 
                         alignItems: 'center', 
@@ -364,13 +380,21 @@ const Dashboard: React.FC = () => {
                         }
                       />
                     </AlertItem>
-                  ))}
+                    );
+                  })}
                 </List>
               )}
             </Box>
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Country Detail Widget */}
+      <CountryDetailWidget
+        country={selectedCountry}
+        isOpen={isCountryDetailOpen}
+        onClose={handleCountryDetailClose}
+      />
     </StyledContainer>
   );
 };

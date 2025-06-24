@@ -163,6 +163,11 @@ export const apiService = {
     const url = `/events/${countryCode}?days=${days}${category ? `&category=${category}` : ''}`;
     const response = await api.get(url);
     return response.data;
+  },
+
+  getCountryAnalysis: async (countryCode: string): Promise<any> => {
+    const response = await api.get(`/countries/${countryCode}/analysis`);
+    return response.data;
   }
 };
 
