@@ -170,31 +170,16 @@ const CountryDetailWidget: React.FC<CountryDetailWidgetProps> = ({
     
     setLoadingAnalysis(true);
     try {
-      // This will be implemented in the backend
       const analysisData = await apiService.getCountryAnalysis(country.code);
       setAnalysis(analysisData);
     } catch (error) {
       console.error('Error loading country analysis:', error);
-      // Fallback to mock data for now
       setAnalysis({
-        summary: `${country.name} presents a ${getRiskLevel(country.latest_risk_score?.overall_score || 0).toLowerCase()} risk environment with an overall score of ${country.latest_risk_score?.overall_score?.toFixed(1) || 'N/A'}.`,
-        key_drivers: [
-          'Political stability and governance structure',
-          'Economic diversification and growth patterns',
-          'Security situation and conflict potential',
-          'Social cohesion and demographic trends'
-        ],
-        risk_factors: [
-          'Regional tensions and geopolitical positioning',
-          'Economic vulnerabilities and external dependencies',
-          'Internal security challenges'
-        ],
-        stability_factors: [
-          'Institutional framework and rule of law',
-          'Economic fundamentals and market conditions',
-          'International partnerships and support'
-        ],
-        outlook: 'Current trends suggest continued monitoring of key risk indicators is essential for strategic planning.'
+        summary: `Unable to load detailed analysis for ${country.name}. Basic risk assessment shows an overall score of ${country.latest_risk_score?.overall_score?.toFixed(1) || 'N/A'}.`,
+        key_drivers: ['Analysis temporarily unavailable'],
+        risk_factors: ['Unable to assess current risk factors'],
+        stability_factors: ['Unable to assess stability factors'],
+        outlook: 'Detailed analysis will be available when data connection is restored.'
       });
     } finally {
       setLoadingAnalysis(false);

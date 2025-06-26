@@ -11,8 +11,10 @@ from app.models.risk_score import RiskScore
 from app.models.risk_score_v2 import RiskScoreV2
 from app.core.risk_service import risk_service
 from app.models.news_event import NewsEvent
+from app.models.processed_event import ProcessedEvent
 from app.core.data_collector import DataCollector
 from app.core.risk_engine import RiskEngine
+from app.services.ai_analysis_service import AIAnalysisService
 
 router = APIRouter()
 
@@ -244,8 +246,22 @@ async def get_country_analysis(country_code: str, db: Session = Depends(get_db))
             RiskScore.country_code == country.code
         ).order_by(desc(RiskScore.timestamp)).first()
     
-    # Generate analysis based on country profile and risk scores
-    analysis = generate_country_analysis(country, latest_score)
+    # Get recent events for context (through raw_event relationship)
+    from app.models.raw_event import RawEvent
+    recent_events = db.query(ProcessedEvent).join(RawEvent).filter(
+        RawEvent.country_id == country.id,
+        RawEvent.event_date >= datetime.utcnow() - timedelta(days=30)
+    ).order_by(desc(RawEvent.event_date)).limit(20).all()
+    
+    # Get historical trend (last 30 days)
+    historical_scores = db.query(RiskScoreV2).filter(
+        RiskScoreV2.country_id == country.id,
+        RiskScoreV2.score_date >= datetime.utcnow() - timedelta(days=30)
+    ).order_by(RiskScoreV2.score_date).all()
+    
+    # Generate AI-powered analysis
+    ai_service = AIAnalysisService()
+    analysis = await ai_service.generate_country_analysis(country, latest_score, recent_events, historical_scores)
     
     return analysis
 
@@ -353,5 +369,154 @@ def generate_country_analysis(country: Country, latest_score) -> dict:
         "stability_factors": profile["stability"],
         "outlook": profile["outlook"],
         "risk_level": risk_level,
+        "generated_at": datetime.utcnow().isoformat()
+    }
+
+def generate_dynamic_country_analysis(country: Country, latest_score, recent_events, historical_scores) -> dict:
+    """Generate dynamic analysis based on current data and trends"""
+    
+    # Extract scores
+    if latest_score:
+        overall_score = float(latest_score.overall_score)
+        if hasattr(latest_score, 'political_stability_score'):
+            political_score = float(latest_score.political_stability_score)
+            economic_score = float(latest_score.economic_risk_score)
+            security_score = float(latest_score.conflict_risk_score)
+            social_score = float(latest_score.institutional_quality_score)
+        else:
+            political_score = float(latest_score.political_score)
+            economic_score = float(latest_score.economic_score)
+            security_score = float(latest_score.security_score)
+            social_score = float(latest_score.social_score)
+    else:
+        overall_score = political_score = economic_score = security_score = social_score = 50.0
+    
+    risk_level = ("very high" if overall_score >= 80 else "high" if overall_score >= 65 else 
+                 "medium-high" if overall_score >= 50 else "medium" if overall_score >= 35 else 
+                 "low-medium" if overall_score >= 20 else "low")
+    
+    # Calculate trend
+    trend_direction = "stable"
+    trend_magnitude = 0
+    if len(historical_scores) >= 2:
+        oldest_score = float(historical_scores[0].overall_score)
+        newest_score = float(historical_scores[-1].overall_score)
+        trend_magnitude = newest_score - oldest_score
+        if trend_magnitude > 3:
+            trend_direction = "increasing"
+        elif trend_magnitude < -3:
+            trend_direction = "decreasing"
+    
+    # Analyze events
+    event_categories = {}
+    if recent_events:
+        for event in recent_events:
+            category = getattr(event, 'risk_category', 'general')
+            event_categories[category] = event_categories.get(category, 0) + 1
+    
+    # Generate dynamic factors based on scores
+    key_factors = []
+    if political_score > 60:
+        key_factors.append("Political tensions and governance challenges")
+    elif political_score < 40:
+        key_factors.append("Political stability and institutional strength")
+    else:
+        key_factors.append("Political dynamics and governance evolution")
+    
+    if economic_score > 60:
+        key_factors.append("Economic vulnerabilities and market pressures")
+    elif economic_score < 40:
+        key_factors.append("Economic resilience and growth fundamentals")
+    else:
+        key_factors.append("Economic development and structural transitions")
+    
+    if security_score > 60:
+        key_factors.append("Security challenges and conflict risks")
+    elif security_score < 40:
+        key_factors.append("Security stability and defense capabilities")
+    else:
+        key_factors.append("Security environment and regional dynamics")
+    
+    if social_score > 60:
+        key_factors.append("Social tensions and cohesion challenges")
+    else:
+        key_factors.append("Social stability and institutional development")
+    
+    # Risk factors based on highest scores
+    risk_factors = []
+    scores_dict = {"Political": political_score, "Economic": economic_score, 
+                   "Security": security_score, "Social": social_score}
+    high_risk_areas = [k for k, v in scores_dict.items() if v > 55]
+    
+    for area in high_risk_areas:
+        risk_factors.append(f"{area} sector vulnerabilities and elevated risk indicators")
+    
+    if not risk_factors:
+        risk_factors = ["Moderate risk levels across assessed dimensions"]
+    
+    # Stability factors
+    stability_factors = []
+    low_risk_areas = [k for k, v in scores_dict.items() if v < 45]
+    for area in low_risk_areas:
+        stability_factors.append(f"Relatively stable {area.lower()} environment")
+    
+    population_size = "large" if country.population > 100000000 else "medium" if country.population > 10000000 else "small"
+    if population_size == "large":
+        stability_factors.append("Large population providing economic scale")
+    
+    region_stability = {
+        "North America": "Institutional frameworks and economic integration",
+        "Europe": "Multilateral cooperation and democratic institutions", 
+        "Asia": "Economic dynamism and regional partnerships",
+        "Middle East": "Strategic importance and energy resources",
+        "Africa": "Growth potential and natural resources",
+        "South America": "Regional cooperation and resource wealth"
+    }
+    
+    if country.region in region_stability:
+        stability_factors.append(region_stability[country.region])
+    
+    if not stability_factors:
+        stability_factors = ["Basic institutional capacity and international engagement"]
+    
+    # Generate outlook
+    trend_text = "stable conditions" if trend_direction == "stable" else f"{trend_direction} risk trajectory"
+    outlook_base = f"Current {trend_text} with {risk_level} overall risk levels suggest "
+    
+    if trend_direction == "increasing" and overall_score > 60:
+        outlook_base += "heightened vigilance and proactive risk management are essential."
+    elif trend_direction == "decreasing" and overall_score < 50:
+        outlook_base += "improving conditions support positive medium-term prospects."
+    else:
+        outlook_base += "continued assessment of evolving conditions for strategic planning."
+    
+    # Generate summary
+    region_context = {
+        "North America": "benefits from institutional stability and economic integration",
+        "Europe": "operates within established multilateral frameworks", 
+        "Asia": "experiences dynamic economic and political transformation",
+        "Middle East": "navigates complex regional dynamics and geopolitical tensions",
+        "Africa": "pursues development amid diverse challenges and opportunities",
+        "South America": "balances economic growth with political stability"
+    }.get(country.region, "faces unique regional dynamics")
+    
+    summary = (f"{country.name} presents a {risk_level} risk environment with an overall score of {overall_score:.1f}. "
+              f"As a {population_size} {country.region} nation, it {region_context}. "
+              f"Risk assessment shows political: {political_score:.1f}, economic: {economic_score:.1f}, "
+              f"security: {security_score:.1f}, social: {social_score:.1f}.")
+    
+    if trend_direction != "stable":
+        summary += f" Risk levels are currently {trend_direction} by {abs(trend_magnitude):.1f} points."
+    
+    return {
+        "summary": summary,
+        "key_drivers": key_factors,
+        "risk_factors": risk_factors,
+        "stability_factors": stability_factors,
+        "outlook": outlook_base,
+        "risk_level": risk_level,
+        "trend_direction": trend_direction,
+        "trend_magnitude": round(trend_magnitude, 1),
+        "recent_event_categories": list(event_categories.keys()) if event_categories else [],
         "generated_at": datetime.utcnow().isoformat()
     }
