@@ -361,7 +361,10 @@ const WorldMap: React.FC<WorldMapProps> = ({ countries, onCountryClick }) => {
           <div style={{ height: '400px', width: '100%', backgroundColor: '#0D1117' }}>
             <MapContainer
               center={[20, 0]}
-              zoom={2}
+              zoom={1}
+              minZoom={1}
+              maxZoom={7}
+              maxBounds={[[-90, -180], [90, 180]]}
               style={{ height: '400px', width: '100%', backgroundColor: '#0D1117' }}
               zoomControl={true}
               scrollWheelZoom={true}
